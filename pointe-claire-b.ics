@@ -1,0 +1,56 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Pointe-Claire//Waste Collection Sector B//EN
+X-WR-CALNAME:Pointe-Claire Sector B Collection 2026-2027
+
+# ORGANIC WASTE (Matières organiques) - Every Monday [cite: 16, 17]
+BEGIN:VEVENT
+SUMMARY:Organic Waste (Sector B)
+RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20270329T000000Z
+DTSTART:20260406T070000
+DURATION:PT1H
+DESCRIPTION:Weekly organic waste collection[cite: 1].
+END:VEVENT
+
+# RECYCLABLES (Matières recyclables) - Every Wednesday [cite: 18, 19]
+BEGIN:VEVENT
+SUMMARY:Recyclables (Sector B)
+RRULE:FREQ=WEEKLY;BYDAY=WE;UNTIL=20270331T000000Z
+DTSTART:20260401T070000
+DURATION:PT1H
+DESCRIPTION:Weekly recyclables collection[cite: 1].
+END:VEVENT
+
+# HOUSEHOLD WASTE (Déchets domestiques) - Every Second Thursday [cite: 21, 32]
+BEGIN:VEVENT
+SUMMARY:Household Waste (Sector B)
+RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TH;UNTIL=20270325T000000Z
+DTSTART:20260409T070000
+DURATION:PT1H
+DESCRIPTION:Bi-weekly household waste collection[cite: 1].
+END:VEVENT
+
+# BULKY ITEMS (Encombrants) - First Wednesday of the Month [cite: 35, 36]
+BEGIN:VEVENT
+SUMMARY:Bulky Items (Sector B)
+RRULE:FREQ=MONTHLY;BYDAY=1WE;UNTIL=20270303T000000Z
+DTSTART:20260401T070000
+DURATION:PT1H
+DESCRIPTION:Monthly bulky item collection[cite: 1].
+END:VEVENT
+
+# CHRISTMAS TREES (Arbres de Noël) [cite: 49, 50]
+BEGIN:VEVENT
+SUMMARY:Christmas Tree Collection
+DTSTART:20270106T070000
+DURATION:PT1H
+DESCRIPTION:Special collection for Christmas trees[cite: 61].
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:Christmas Tree Collection
+DTSTART:20270113T070000
+DURATION:PT1H
+DESCRIPTION:Special collection for Christmas trees[cite: 61].
+END:VEVENT
+
+END:VCALENDAR
