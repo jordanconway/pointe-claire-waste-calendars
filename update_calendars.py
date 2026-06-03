@@ -166,25 +166,14 @@ _COL_TO_ISOWD = [7, 1, 2, 3, 4, 5, 6]
 
 # Collection-colour map (CMYK tuples as returned by pdfplumber)
 _COLLECTION_COLORS = {
-    (0.40, 0.00, 0.80, 0.00): "organic",
-    (0.00, 0.52, 0.75, 0.00): "recyclables",
-    (0.00, 0.20, 0.85, 0.00): "recyclables",   # alternate shade, same collection
-    (0.25, 0.85, 0.85, 0.25): "household",
-    (0.45, 0.70, 0.00, 0.00): "leaf",
-    (0.82, 0.19, 0.44, 0.23): "mattress",
-}
-
-# Colours whose presence as wide/tall background rects we want to ignore
-_BACKGROUND_COLORS = {
-    (0, 0, 0, 0),
-    (0, 0, 0, 0.75),
-    (0, 0, 0, 1),
-    (1.0, 0.48, 0.12, 0.58),  # orange row-divider strips
-    (0.0, 0.90, 0.00, 0.00),  # green section-header bars
-    (0.08, 0.01, 0.001, 0.002),
-    (1.0, 0.13, 0.01, 0.02),
-    (0.30, 1.00, 0.85, 0.35),  # Sector-B variant green section header
-    (1.0, 0.76, 0.00, 0.00),   # yellow (recycling day-of-week marker, not individual)
+    (0.40, 0.00, 0.80, 0.00): "organic",      # Green (Apple core)
+    (1.00, 0.76, 0.00, 0.00): "recyclables",  # Blue (Blue bin)
+    (0.00, 0.00, 0.00, 0.75): "household",    # Grey (Trash can)
+    (0.45, 0.70, 0.00, 0.00): "leaf",         # Brown (Leaf collection)
+    (0.25, 0.85, 0.85, 0.25): "leaf",         # Brown (Alternative leaf collection shade)
+    (0.82, 0.19, 0.44, 0.23): "mattress",     # Pink (Mattress/box-spring)
+    (0.00, 0.52, 0.75, 0.00): "bulky",        # Orange (Bulky items)
+    (0.00, 0.20, 0.85, 0.00): "ecocentre",    # Yellow-Orange (Ecocentre/HHW)
 }
 
 
@@ -220,9 +209,8 @@ def parse_pdf_schedule(pdf_data: bytes, sector: str) -> dict:
     """
     Parse the collection schedule from the PDF's coloured calendar grid.
 
-    Returns a schedule dict compatible with generate_ics().
-    Falls back to the known-good schedule from convert_calendars.py when
-    the grid analysis is inconclusive.
+    Returns a schedule dict containing sorted lists of exact dates for each collection type,
+    plus start_year and end_year.
     """
     try:
         import pdfplumber  # type: ignore[import]
@@ -237,104 +225,50 @@ def parse_pdf_schedule(pdf_data: bytes, sector: str) -> dict:
 
     start_year, end_year = _year_range_from_text(raw_text)
 
-    # ---- collect coloured cells ----------------------------------------
-    # A "cell" is a filled rect that:
-    #   • has a known collection colour
-    #   • is taller than 18 pt (avoids thin divider strips)
-    #   • is between 20 and 60 pt wide (individual day cells are ~55 pt;
-    #     split/shared cells are ~28 pt)
-    cells = [
-        r for r in rects
-        if r.get("non_stroking_color") in _COLLECTION_COLORS
-        and r["height"] > 18
-        and 20 < r["width"] <= _COL_WIDTH + 5
-    ]
+    # Initialize collections
+    collections = {k: set() for k in set(_COLLECTION_COLORS.values())}
 
-    # ---- map each cell to (collection_type, day-of-week ISO, month) ----
-    type_dows: dict = defaultdict(Counter)   # type → Counter of ISO weekday
-    type_months: dict = defaultdict(set)     # type → set of (year, month)
+    for r in rects:
+        c = r.get("non_stroking_color")
+        if c in _COLLECTION_COLORS:
+            # Skip background and header blocks (anything too wide)
+            if r["width"] > 56:
+                continue
+            # Height filter (skip line dividers)
+            if r["height"] < 15:
+                continue
 
-    for cell in cells:
-        sec = _section_of(cell["top"])
-        grd = _grid_of(cell["x0"])
-        if sec < 0 or grd < 0:
-            continue
-        col = _col_of(cell["x0"], grd)
-        if col < 0:
-            continue
-        yr_off, month = _MONTH_GRID[sec][grd]
-        year = start_year + yr_off
-        ctype = _COLLECTION_COLORS[cell["non_stroking_color"]]
-        isowd = _COL_TO_ISOWD[col]
-        type_dows[ctype][isowd] += 1
-        type_months[ctype].add((year, month))
+            x0 = r["x0"]
+            top = r["top"]
 
-    # ---- derive dominant DOW for each type ------------------------------
-    def dominant_dow(ctype: str) -> int:
-        """Return the most-common ISO weekday for a collection type."""
-        if ctype not in type_dows or not type_dows[ctype]:
-            return None
-        return type_dows[ctype].most_common(1)[0][0]
+            sec = _section_of(top)
+            grd = _grid_of(x0)
+            if sec >= 0 and grd >= 0:
+                col = _col_of(x0, grd)
+                if col >= 0:
+                    yr_off, month = _MONTH_GRID[sec][grd]
+                    year = start_year + yr_off
 
-    # ---- map ISO weekday → ical BYDAY string -------------------------
-    _iso_to_byday = {1: "MO", 2: "TU", 3: "WE", 4: "TH", 5: "FR", 6: "SA", 7: "SU"}
+                    # Compute row_idx
+                    first_row_top = _SECTION_TOPS[sec] + 19.94 + 18.38
+                    row_idx = max(0, int((top - first_row_top) / 21.6))
 
-    # ---- helper: first occurrence of isowd on or after a given date ----
-    def first_on_or_after(from_date: date, isowd: int) -> date:
-        delta = (isowd % 7 - from_date.isoweekday() % 7) % 7
-        return from_date + timedelta(days=delta)
+                    # Calculate date
+                    first_day_date = date(year, month, 1)
+                    first_day_weekday = first_day_date.isoweekday() % 7 # Sunday = 0
 
-    period_start = date(start_year, 4, 1)
-    period_end = date(end_year, 3, 31)
+                    day = row_idx * 7 + col - first_day_weekday + 1
 
-    # ---- ORGANIC (weekly) -----------------------------------------------
-    org_isowd = dominant_dow("organic") or 1   # default Monday
-    organic_dtstart = first_on_or_after(period_start, org_isowd)
+                    try:
+                        d = date(year, month, day)
+                        ctype = _COLLECTION_COLORS[c]
+                        collections[ctype].add(d)
+                    except ValueError:
+                        # Day out of range
+                        pass
 
-    # ---- RECYCLABLES (weekly) -------------------------------------------
-    rec_isowd = dominant_dow("recyclables") or 3   # default Wednesday
-    recyclables_dtstart = first_on_or_after(period_start, rec_isowd)
-
-    # ---- HOUSEHOLD WASTE (bi-weekly, sector-specific) -------------------
-    # Household waste is encoded as half-width split cells shared with the
-    # organic Monday cell, so it appears at most ~13 times per year in the
-    # PDF (far fewer than weekly collections).  The dominant DOW is only
-    # trustworthy when we see a clear majority; otherwise fall back to the
-    # known-good defaults from convert_calendars.py (Tue=A, Thu=B).
-    hw_isowd = None
-    if "household" in type_dows:
-        mc = type_dows["household"].most_common(2)
-        # Only trust the grid result when one DOW dominates clearly:
-        # at least 4 occurrences AND at least twice as many as runner-up.
-        if mc and mc[0][1] >= 4:
-            runner_up = mc[1][1] if len(mc) > 1 else 0
-            if mc[0][1] >= 2 * runner_up:
-                hw_isowd = mc[0][0]
-    if hw_isowd is None:
-        hw_isowd = 2 if sector == "A" else 4   # Tue / Thu
-
-    # The known start dates from convert_calendars.py:
-    #   Sector A: April 7, 2026 (Tuesday)
-    #   Sector B: April 9, 2026 (Thursday)
-    # We recalculate for the actual year by finding the correct weekday in April.
-    hw_dtstart = first_on_or_after(period_start, hw_isowd)
-    # For Sector B, the first collection is the *second* occurrence if April
-    # starts on the household day (avoids a collision with Sector A week).
-    if sector == "B" and hw_dtstart.month == 4 and hw_dtstart.day <= 2:
-        hw_dtstart += timedelta(weeks=1)
-
-    # ---- BULKY ITEMS (first Wednesday of each month) --------------------
-    # Bulky items are never encoded as grid cells in the PDF (legend text only).
-    # The city schedule is consistently: first Wednesday of each month.
-    bulky_dtstart = first_on_or_after(period_start, 3)  # first Wed in April
-    while bulky_dtstart.day > 7:
-        bulky_dtstart -= timedelta(weeks=1)
-
-    # ---- CHRISTMAS TREES ------------------------------------------------
-    # Look for pairs of dates in January near "Christmas tree" in the raw text.
-    # Fall back to the known-good dates from convert_calendars.py.
+    # Extract Christmas tree dates from raw text
     xmas_dates = _extract_christmas_tree_dates(raw_text, end_year, sector)
-    # Validate: Christmas tree dates must be in January
     xmas_dates = [d for d in xmas_dates if d.month == 1]
     if not xmas_dates:
         xmas_dates = (
@@ -343,31 +277,15 @@ def parse_pdf_schedule(pdf_data: bytes, sector: str) -> dict:
             else [date(end_year, 1, 6), date(end_year, 1, 13)]
         )
 
+    # Convert sets to sorted lists
     schedule = {
         "start_year": start_year,
         "end_year": end_year,
-        "organic": {
-            "byday": _iso_to_byday[org_isowd],
-            "dtstart": organic_dtstart,
-            "until": period_end,
-        },
-        "recyclables": {
-            "byday": _iso_to_byday[rec_isowd],
-            "dtstart": recyclables_dtstart,
-            "until": period_end,
-        },
-        "household": {
-            "byday": _iso_to_byday[hw_isowd],
-            "dtstart": hw_dtstart,
-            "until": period_end,
-        },
-        "bulky": {
-            "byday": "WE",
-            "dtstart": bulky_dtstart,
-            "until": period_end,
-        },
-        "christmas_trees": xmas_dates,
+        "christmas_trees": sorted(xmas_dates),
     }
+    for ctype in collections:
+        schedule[ctype] = sorted(list(collections[ctype]))
+
     return schedule
 
 
@@ -426,8 +344,7 @@ def _extract_christmas_tree_dates(text: str, end_year: int, sector: str) -> list
 def generate_ics(sector: str, schedule: dict) -> bytes:
     """
     Build a complete iCalendar object and return its serialised bytes.
-    Mirrors the structure produced by convert_calendars.py but derives all
-    dates from the parsed schedule.
+    Generates discrete VEVENT entries for each specific collection day.
     """
     try:
         from icalendar import Calendar, Event  # type: ignore[import]
@@ -437,7 +354,6 @@ def generate_ics(sector: str, schedule: dict) -> bytes:
 
     sy = schedule["start_year"]
     ey = schedule["end_year"]
-    end_dt = datetime(ey, 3, 31, 23, 59, 59)
 
     def _dt(d: date) -> datetime:
         return datetime(d.year, d.month, d.day, 7, 0, 0)
@@ -447,54 +363,32 @@ def generate_ics(sector: str, schedule: dict) -> bytes:
     cal.add("version", "2.0")
     cal.add("x-wr-calname", f"Pointe-Claire Sector {sector} Collection {sy}-{ey}")
 
-    # 1. Organic waste — weekly
-    o = schedule["organic"]
-    ev = Event()
-    ev.add("summary", f"Organic Waste - Sector {sector}")
-    ev.add("dtstart", _dt(o["dtstart"]))
-    ev.add("duration", timedelta(hours=1))
-    ev.add("rrule", {"freq": "weekly", "byday": o["byday"], "until": end_dt})
-    ev.add("description", "Matières organiques collection.")
-    cal.add_component(ev)
+    # Event definitions: (key, summary, description)
+    event_defs = [
+        ("organic", "Organic Waste", "Matières organiques collection."),
+        ("recyclables", "Recyclables", "Matières recyclables collection."),
+        ("household", "Household Waste", "Déchets domestiques collection."),
+        ("bulky", "Bulky Items", "Encombrants collection."),
+        ("leaf", "Leaf Collection", "Collecte saisonnière de feuilles."),
+        ("mattress", "Mattress/Box-Spring Collection", "Collecte de matelas et sommiers."),
+        ("ecocentre", "Ecocentre Collection", "Collecte éco-centre / Ecocentre collection."),
+    ]
 
-    # 2. Recyclables — weekly
-    r = schedule["recyclables"]
-    ev = Event()
-    ev.add("summary", f"Recyclables - Sector {sector}")
-    ev.add("dtstart", _dt(r["dtstart"]))
-    ev.add("duration", timedelta(hours=1))
-    ev.add("rrule", {"freq": "weekly", "byday": r["byday"], "until": end_dt})
-    ev.add("description", "Matières recyclables collection.")
-    cal.add_component(ev)
+    for key, summary, desc in event_defs:
+        dates_list = schedule.get(key, [])
+        for d in dates_list:
+            ev = Event()
+            ev.add("summary", f"{summary} - Sector {sector}")
+            ev.add("dtstart", _dt(d))
+            ev.add("duration", timedelta(hours=1))
+            ev.add("description", desc)
+            cal.add_component(ev)
 
-    # 3. Bulky items — first Wednesday of each month
-    b = schedule["bulky"]
-    ev = Event()
-    ev.add("summary", f"Bulky Items - Sector {sector}")
-    ev.add("dtstart", _dt(b["dtstart"]))
-    ev.add("duration", timedelta(hours=1))
-    ev.add("rrule", {"freq": "monthly", "byday": "1WE", "until": end_dt})
-    ev.add("description", "Encombrants collection.")
-    cal.add_component(ev)
-
-    # 4. Household waste — bi-weekly
-    h = schedule["household"]
-    ev = Event()
-    ev.add("summary", f"Household Waste - Sector {sector}")
-    ev.add("dtstart", _dt(h["dtstart"]))
-    ev.add("duration", timedelta(hours=1))
-    ev.add("rrule", {
-        "freq": "weekly", "interval": 2,
-        "byday": h["byday"], "until": end_dt,
-    })
-    ev.add("description", "Déchets domestiques collection.")
-    cal.add_component(ev)
-
-    # 5. Christmas tree collection — specific dates
-    for xmas_date in schedule["christmas_trees"]:
+    # Christmas Trees
+    for d in schedule.get("christmas_trees", []):
         ev = Event()
         ev.add("summary", f"Christmas Tree Collection - Sector {sector}")
-        ev.add("dtstart", _dt(xmas_date))
+        ev.add("dtstart", _dt(d))
         ev.add("duration", timedelta(hours=1))
         ev.add("description", "Special collection for Christmas trees.")
         cal.add_component(ev)
@@ -534,14 +428,13 @@ def process_sector(sector: str, url: str,
         f"[sector {sector}] Parsed schedule for "
         f"{schedule['start_year']}–{schedule['end_year']}:"
     )
-    print(f"  Organic:      weekly on {schedule['organic']['byday']}"
-          f" starting {schedule['organic']['dtstart']}")
-    print(f"  Recyclables:  weekly on {schedule['recyclables']['byday']}"
-          f" starting {schedule['recyclables']['dtstart']}")
-    print(f"  Household:    bi-weekly on {schedule['household']['byday']}"
-          f" starting {schedule['household']['dtstart']}")
-    print(f"  Bulky:        first WE of month"
-          f" starting {schedule['bulky']['dtstart']}")
+    print(f"  Organic:      {len(schedule['organic'])} events")
+    print(f"  Recyclables:  {len(schedule['recyclables'])} events")
+    print(f"  Household:    {len(schedule['household'])} events")
+    print(f"  Bulky:        {len(schedule['bulky'])} events")
+    print(f"  Leaf:         {len(schedule['leaf'])} events")
+    print(f"  Mattress:     {len(schedule['mattress'])} events")
+    print(f"  Ecocentre:    {len(schedule['ecocentre'])} events")
     print(f"  Christmas:    {schedule['christmas_trees']}")
 
     ics_bytes = generate_ics(sector, schedule)
