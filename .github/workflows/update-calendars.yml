@@ -40,6 +40,9 @@ jobs:
       - name: Install dependencies
         run: pip install --require-hashes -r requirements.lock
 
+      - name: Run unit tests
+        run: python -m unittest test_update_calendars.py
+
       - name: Run calendar update script
         id: update
         run: python update_calendars.py
