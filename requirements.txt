@@ -1,2 +1,2 @@
-icalendar>=7.1.3,<8
-pdfplumber>=0.11.10,<1
+icalendar==7.1.3
+pdfplumber==0.11.10
