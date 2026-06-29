@@ -1,0 +1,20 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+      semver-minor-days: 7
+      semver-patch-days: 3
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    # Note: GitHub Actions tags (v4, v4.1.2) aren't always parsed as SemVer
+    # by Dependabot, so we rely on default-days which always applies.
+    cooldown:
+      default-days: 7
