@@ -82,7 +82,7 @@ def fetch(url: str) -> bytes:
 # ---------------------------------------------------------------------------
 
 _PDF_RE = re.compile(
-    r'https?://[^"\'>\s]*CAL_collectes-\d{4}-\d{4}-secteur-([AB])\.pdf',
+    r'https?://[^"\'>\s]*?collectes-\d{4}-.*?([AB])\.pdf',
     re.IGNORECASE,
 )
 
