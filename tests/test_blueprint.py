@@ -21,12 +21,17 @@ if HAS_DEPS:
     )
 
 
+from pathlib import Path
+
+BLUEPRINT_PATH = Path(__file__).resolve().parent.parent / "blueprints" / "automation" / "waste_collection_reminder.yaml"
+
+
 class TestBlueprint(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if not HAS_DEPS:
             raise unittest.SkipTest("yaml and jinja2 are required for blueprint tests")
-        with open("automation.yml", "r", encoding="utf-8") as f:
+        with open(BLUEPRINT_PATH, "r", encoding="utf-8") as f:
             cls.blueprint_content = f.read()
         cls.data = yaml.safe_load(cls.blueprint_content)
         cls.jinja_env = jinja2.Environment()

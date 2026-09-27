@@ -26,18 +26,21 @@ Subscribe using these raw URLs:
 
 ## Home Assistant Blueprint
 
-An automation blueprint is provided in [`automation.yml`](file:///Users/jconway/git/github/jordanconway/pointe-claire-waste-calendars/automation.yml) to notify you the evening before collection day with custom icons and colors for each collection type (compost, recycling, garbage, bulky items, leaves, and Christmas trees).
+An automation blueprint is provided in [`blueprints/automation/waste_collection_reminder.yaml`](file:///Users/jconway/git/github/jordanconway/pointe-claire-waste-calendars/blueprints/automation/waste_collection_reminder.yaml) to notify you the evening before collection day with custom icons and colors for each collection type (compost, recycling, garbage, bulky items, leaves, and Christmas trees).
 
-### Importing into Home Assistant
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fjordanconway%2Fpointe-claire-waste-calendars%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fwaste_collection_reminder.yaml)
+
+### Manual Import
 
 1. In Home Assistant, navigate to **Settings > Automations & scenes > Blueprints**.
 2. Click **Import Blueprint** in the bottom right corner.
 3. Paste the URL:
    ```
-   https://github.com/jordanconway/pointe-claire-waste-calendars/blob/main/automation.yml
+   https://github.com/jordanconway/pointe-claire-waste-calendars/blob/main/blueprints/automation/waste_collection_reminder.yaml
    ```
 4. Click **Preview** and then **Import Blueprint**.
 5. Create an automation from the blueprint, selecting your waste calendar entity and desired notification destination (mobile device or notify service).
+
 
 ## Scheduled Updates
 
