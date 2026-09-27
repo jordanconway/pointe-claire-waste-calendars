@@ -13,16 +13,19 @@ Subscribe using these raw URLs:
 
 ## Schedule
 
+_Accurate as of September 27, 2026, based on the City of Pointe-Claire 2026–2027 collection calendar and municipal guidelines._
+
 | Collection | Sector A | Sector B |
 |------------|----------|----------|
-| Organic waste | Weekly Monday | Weekly Monday |
+| Organic waste | Weekly Monday (biweekly Dec–Mar) | Weekly Monday (biweekly Dec–Mar) |
 | Recyclables | Weekly Thursday | Weekly Thursday |
-| Bulky items | 1st Wednesday of month (Apr–Oct) | 1st Wednesday of month (Apr–Oct) |
-| Household waste | Weekly Tuesday (Jun–Aug)<br>Biweekly Tuesday (Sep–May) | Weekly Wednesday (Jun–Aug)<br>Biweekly Tuesday (Sep–May) |
+| Bulky items | 2nd Wednesday of month (Apr–Oct) | 2nd Wednesday of month (Apr–Oct) |
+| Household waste | Weekly Tuesday (Jun–Oct)<br>Biweekly Tuesday (Nov–May) | Weekly Wednesday (Jun–Oct)<br>Biweekly Tuesday (Nov–May) |
+| Branch collection | May 1 – Oct 31 (curbside continuous) | May 1 – Oct 31 (curbside continuous) |
+| Leaf collection | Biweekly Monday in Spring & Autumn (specific dates) | Biweekly Monday in Spring & Autumn (specific dates) |
+| Mattress / Box-spring | 1st Wednesday of month (May, Jul, Oct) | 1st Thursday of month (May, Jul, Oct) |
 | Christmas trees | January (specific dates) | January (specific dates) |
-| Leaf collection | Seasonal Spring & Autumn (specific dates) | Seasonal Spring & Autumn (specific dates) |
-| Mattress / Box-spring | January (specific date) | January (specific date) |
-| Ecocentre drop-offs | Specific Saturdays (May, July, Sep, Oct) | Specific Saturdays (May, July, Sep, Oct) |
+| Ecocentre drop-offs | Specific Saturdays (May, Jul, Sep, Oct) | Specific Saturdays (May, Jul, Sep, Oct) |
 
 ## Home Assistant Blueprint
 
