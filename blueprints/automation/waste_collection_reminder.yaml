@@ -1,0 +1,226 @@
+blueprint:
+  name: Waste Collection Reminder
+  description: >-
+    Sends notifications the evening before scheduled waste collection (recycling,
+    organic waste / compost, household waste, bulky items, leaves, and Christmas trees)
+    from a calendar entity. Supports custom notification icons and colors for mobile apps,
+    an optional second reminder later in the evening, and custom action hooks.
+  domain: automation
+  input:
+    calendar_entity:
+      name: Waste Collection Calendar
+      description: The calendar entity containing waste collection events (e.g. calendar.waste_collection_schedule_pointe_claire_qc).
+      selector:
+        entity:
+          filter:
+            domain: calendar
+    notify_service:
+      name: Notification Service (Optional)
+      description: >-
+        The notification service or notify group to call (e.g. notify.jordan_and_kate_phones,
+        notify.mobile_app_your_phone, or notify.notify). Leave blank if using Mobile App Device below.
+      default: ""
+      selector:
+        text: {}
+    notify_device:
+      name: Mobile App Device (Optional)
+      description: >-
+        Device running the Home Assistant Companion App. Used if Notification Service is left blank.
+      default: ""
+      selector:
+        device:
+          filter:
+            - integration: mobile_app
+    first_reminder_offset:
+      name: First Reminder Offset
+      description: >-
+        Time offset before calendar event start (format: -HH:MM:SS).
+        For events starting at midnight, -04:00:00 triggers at 8:00 PM the night before.
+      default: "-04:00:00"
+      selector:
+        text: {}
+    second_reminder_offset:
+      name: Second Reminder Offset
+      description: >-
+        Time offset before calendar event start (format: -HH:MM:SS).
+        For events starting at midnight, -02:00:00 triggers at 10:00 PM the night before.
+      default: "-02:00:00"
+      selector:
+        text: {}
+    enable_second_reminder:
+      name: Enable Second Reminder
+      description: Whether to send the second reminder later in the evening.
+      default: true
+      selector:
+        boolean: {}
+    custom_action:
+      name: Custom Actions (Optional)
+      description: Additional actions to execute when a reminder fires (e.g. voice announcements, TTS, dashboard updates).
+      default: []
+      selector:
+        action: {}
+
+mode: parallel
+max: 10
+
+triggers:
+  - trigger: calendar
+    entity_id: !input calendar_entity
+    event: start
+    offset: !input first_reminder_offset
+    id: night_before
+  - trigger: calendar
+    entity_id: !input calendar_entity
+    event: start
+    offset: !input second_reminder_offset
+    id: reminder
+
+variables:
+  notify_service: !input notify_service
+  notify_device: !input notify_device
+  target_service: >-
+    {% if notify_service | trim != '' %}
+      {{ notify_service | trim }}
+    {% elif notify_device != '' %}
+      notify.mobile_app_{{ device_attr(notify_device, 'name') | slugify }}
+    {% else %}
+      notify.notify
+    {% endif %}
+  enable_second_reminder: !input enable_second_reminder
+  raw_summary: >-
+    {% if trigger is defined and trigger.calendar_event is defined and trigger.calendar_event is not none %}
+      {{ trigger.calendar_event.summary }}
+    {% else %}
+      {{ test_summary | default('Garbage') }}
+    {% endif %}
+  summary: "{{ raw_summary | trim | lower }}"
+  trigger_id: >-
+    {% if trigger is defined and trigger.id is defined and trigger.id != 'manual' %}
+      {{ trigger.id | trim }}
+    {% else %}
+      {{ test_id | default('night_before') }}
+    {% endif %}
+
+actions:
+  - choose:
+      # First reminder (night_before)
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger_id == 'night_before' }}"
+        sequence:
+          - action: "{{ target_service }}"
+            data:
+              title: >-
+                {% if 'recycl' in summary %}
+                  ♻️ Recycling Tomorrow
+                {% elif 'compost' in summary or 'organic' in summary or 'residue' in summary %}
+                  🌿 Compost Tomorrow
+                {% elif 'bulky' in summary or 'encombr' in summary or 'mattress' in summary or 'sommier' in summary %}
+                  📦 Bulky Items Tomorrow
+                {% elif 'leaf' in summary or 'feuille' in summary %}
+                  🍂 Leaf Collection Tomorrow
+                {% elif 'tree' in summary or 'arbre' in summary or 'sapin' in summary or 'noel' in summary %}
+                  🎄 Christmas Tree Collection Tomorrow
+                {% elif 'ecocentre' in summary or 'éco-centre' in summary %}
+                  ♻️ Ecocentre Drop-off Tomorrow
+                {% else %}
+                  🗑️ Garbage Tomorrow
+                {% endif %}
+              message: >-
+                Tomorrow is {{ raw_summary | trim }}. Don't forget to put the bins out!
+              data:
+                notification_icon: >-
+                  {% if 'recycl' in summary %}
+                    mdi:recycle
+                  {% elif 'compost' in summary or 'organic' in summary or 'residue' in summary %}
+                    mdi:sprout
+                  {% elif 'bulky' in summary or 'encombr' in summary or 'mattress' in summary or 'sommier' in summary %}
+                    mdi:couch
+                  {% elif 'leaf' in summary or 'feuille' in summary %}
+                    mdi:leaf-maple
+                  {% elif 'tree' in summary or 'arbre' in summary or 'sapin' in summary or 'noel' in summary %}
+                    mdi:pine-tree
+                  {% elif 'ecocentre' in summary or 'éco-centre' in summary %}
+                    mdi:recycle-variant
+                  {% else %}
+                    mdi:delete-empty
+                  {% endif %}
+                color: >-
+                  {% if 'recycl' in summary %}
+                    #1e88e5
+                  {% elif 'compost' in summary or 'organic' in summary or 'residue' in summary %}
+                    #4caf50
+                  {% elif 'bulky' in summary or 'encombr' in summary or 'mattress' in summary or 'sommier' in summary %}
+                    #8d6e63
+                  {% elif 'leaf' in summary or 'feuille' in summary %}
+                    #e65100
+                  {% elif 'tree' in summary or 'arbre' in summary or 'sapin' in summary or 'noel' in summary %}
+                    #2e7d32
+                  {% elif 'ecocentre' in summary or 'éco-centre' in summary %}
+                    #0288d1
+                  {% else %}
+                    #757575
+                  {% endif %}
+          - choose: []
+            default: !input custom_action
+
+      # Second reminder (reminder)
+      - conditions:
+          - condition: template
+            value_template: "{{ enable_second_reminder and (trigger_id == 'reminder') }}"
+        sequence:
+          - action: "{{ target_service }}"
+            data:
+              title: >-
+                {% if 'recycl' in summary %}
+                  ♻️ Recycling Reminder
+                {% elif 'compost' in summary or 'organic' in summary or 'residue' in summary %}
+                  🌿 Compost Reminder
+                {% elif 'bulky' in summary or 'encombr' in summary or 'mattress' in summary or 'sommier' in summary %}
+                  📦 Bulky Items Reminder
+                {% elif 'leaf' in summary or 'feuille' in summary %}
+                  🍂 Leaf Collection Reminder
+                {% elif 'tree' in summary or 'arbre' in summary or 'sapin' in summary or 'noel' in summary %}
+                  🎄 Christmas Tree Reminder
+                {% elif 'ecocentre' in summary or 'éco-centre' in summary %}
+                  ♻️ Ecocentre Drop-off Reminder
+                {% else %}
+                  🗑️ Garbage Reminder
+                {% endif %}
+              message: >-
+                Reminder: Tomorrow is {{ raw_summary | trim }}. Please make sure the bins are out!
+              data:
+                notification_icon: >-
+                  {% if 'recycl' in summary %}
+                    mdi:recycle-variant
+                  {% elif 'compost' in summary or 'organic' in summary or 'residue' in summary %}
+                    mdi:leaf
+                  {% elif 'bulky' in summary or 'encombr' in summary or 'mattress' in summary or 'sommier' in summary %}
+                    mdi:truck-cargo-container
+                  {% elif 'leaf' in summary or 'feuille' in summary %}
+                    mdi:leaf-maple
+                  {% elif 'tree' in summary or 'arbre' in summary or 'sapin' in summary or 'noel' in summary %}
+                    mdi:pine-tree-box
+                  {% elif 'ecocentre' in summary or 'éco-centre' in summary %}
+                    mdi:recycle
+                  {% else %}
+                    mdi:delete
+                  {% endif %}
+                color: >-
+                  {% if 'recycl' in summary %}
+                    #1565c0
+                  {% elif 'compost' in summary or 'organic' in summary or 'residue' in summary %}
+                    #2e7d32
+                  {% elif 'bulky' in summary or 'encombr' in summary or 'mattress' in summary or 'sommier' in summary %}
+                    #6d4c41
+                  {% elif 'leaf' in summary or 'feuille' in summary %}
+                    #bf360c
+                  {% elif 'tree' in summary or 'arbre' in summary or 'sapin' in summary or 'noel' in summary %}
+                    #1b5e20
+                  {% elif 'ecocentre' in summary or 'éco-centre' in summary %}
+                    #01579b
+                  {% else %}
+                    #424242
+                  {% endif %}
+          - choose: []
+            default: !input custom_action
