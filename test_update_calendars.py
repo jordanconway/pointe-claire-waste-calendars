@@ -87,5 +87,39 @@ class TestUpdateCalendars(unittest.TestCase):
         )
 
 
+    def test_grid_of_2col(self):
+        # _GRID_X_STARTS_2COL = [436.0, 859.3]
+        starts = update_calendars._GRID_X_STARTS_2COL
+        self.assertEqual(update_calendars._grid_of(430, starts), -1)
+        self.assertEqual(update_calendars._grid_of(431, starts), 0)
+        self.assertEqual(update_calendars._grid_of(854.2, starts), 0)
+        self.assertEqual(update_calendars._grid_of(854.3, starts), 1)
+        self.assertEqual(update_calendars._grid_of(1200, starts), 1)
+
+    def test_col_of_2col(self):
+        starts = update_calendars._GRID_X_STARTS_2COL
+        self.assertEqual(update_calendars._col_of(436.0, 0, starts), 0)
+        self.assertEqual(update_calendars._col_of(436.0 + 55.3, 0, starts), 1)
+        self.assertEqual(update_calendars._col_of(859.3 + 55.3 * 3, 1, starts), 3)
+
+    def test_collection_colors(self):
+        colors = update_calendars._COLLECTION_COLORS
+        self.assertEqual(colors[(0.40, 0.00, 0.80, 0.00)], "organic")
+        self.assertEqual(colors[(1.00, 0.76, 0.00, 0.00)], "recyclables")
+        self.assertEqual(colors[(0.00, 0.00, 0.00, 0.75)], "household")
+        self.assertEqual(colors[(0.25, 0.85, 0.85, 0.25)], "leaf")
+        self.assertEqual(colors[(0.45, 0.70, 0.00, 0.00)], "mattress")
+        self.assertEqual(colors[(0.82, 0.19, 0.44, 0.23)], "christmas_trees")
+        self.assertEqual(colors[(0.00, 0.52, 0.75, 0.00)], "bulky")
+        self.assertEqual(colors[(0.00, 0.20, 0.85, 0.00)], "ecocentre")
+
+    def test_extract_christmas_tree_dates_no_false_positive_on_year(self):
+        # Text containing 'february 2027' must not match '20' as a day
+        text = "bulky items christmas trees octobre / october 2026 a février / february 2027 a"
+        dates = update_calendars._extract_christmas_tree_dates(text, 2027, "B")
+        # Should fallback to standard January dates, not February 20
+        self.assertEqual(dates, [date(2027, 1, 6), date(2027, 1, 13)])
+
+
 if __name__ == "__main__":
     unittest.main()
