@@ -15,22 +15,21 @@ Exit codes:
   1 – unrecoverable error
 
 PDF layout (same every year, coordinates may shift slightly):
-  The single-page PDF contains a 3-column × 4-row grid of monthly calendars
-  covering April (start_year) through March (end_year).  Each day cell may be
-  filled with a colour indicating the collection type scheduled that day:
+  The single-page PDF contains either a 3-column × 4-row grid of monthly
+  calendars covering April (start_year) through March (end_year), or a
+  2-column × 4-row mid-year layout covering August through March. Each day cell
+  may be filled with a colour indicating the collection type scheduled that day:
 
   CMYK colour               Collection type
   ─────────────────────────────────────────
-  (0.40, 0.00, 0.80, 0.00)  Organic waste   (weekly, typically Monday)
-  (0.00, 0.52, 0.75, 0.00)  Recyclables     (weekly, typically Wednesday)
-  (0.25, 0.85, 0.85, 0.25)  Household waste (bi-weekly; Tue=Sector A, Thu=Sector B)
-  (0.00, 0.20, 0.85, 0.00)  Recyclables alt (used for some months/sectors)
-  (0.45, 0.70, 0.00, 0.00)  Seasonal leaf collection
-  (0.82, 0.19, 0.44, 0.23)  Mattress/box-spring collection (special date)
-
-  Bulky items are not highlighted as individual cells; the city's schedule
-  always places them on the first Wednesday of each month and the legend is
-  rendered as text only.
+  (0.40, 0.00, 0.80, 0.00)  Organic waste     (Green)
+  (1.00, 0.76, 0.00, 0.00)  Recyclables       (Blue)
+  (0.00, 0.00, 0.00, 0.75)  Household waste   (Grey; Tue/Wed depending on sector & season)
+  (0.25, 0.85, 0.85, 0.25)  Leaf collection   (Brown)
+  (0.45, 0.70, 0.00, 0.00)  Mattress/box-spring (Purple/Brown)
+  (0.82, 0.19, 0.44, 0.23)  Christmas trees   (Burgundy/Pink)
+  (0.00, 0.52, 0.75, 0.00)  Bulky items       (Orange)
+  (0.00, 0.20, 0.85, 0.00)  Ecocentre / HHW   (Yellow-Orange)
 """
 
 import hashlib
@@ -148,12 +147,8 @@ def save_hashes(hashes: dict) -> None:
 # ---------------------------------------------------------------------------
 
 # Grid geometry constants (points; origin top-left)
-_GRID_X_STARTS = [436.0, 859.3, 1282.0]   # left edge of each of the 3 column-groups
-_COL_WIDTH = 55.3                           # width of one day column
-_SECTION_TOPS = [18, 171, 325, 479, 9999]  # top of each of the 4 month rows (+sentinel)
-
-# section_row × grid_col → (year_offset, month)
-# year_offset: 0 = start_year, 1 = end_year
+# 3-column layout (12-month calendar, Apr–Mar)
+_GRID_X_STARTS = [436.0, 859.3, 1282.0]   # default / 3-col
 _MONTH_GRID = [
     [(0, 4), (0, 8), (0, 12)],
     [(0, 5), (0, 9), (1, 1)],
@@ -161,19 +156,31 @@ _MONTH_GRID = [
     [(0, 7), (0, 11), (1, 3)],
 ]
 
+# 2-column layout (8-month mid-year update, Aug–Mar)
+_GRID_X_STARTS_2COL = [436.0, 859.3]
+_MONTH_GRID_2COL = [
+    [(0, 8), (0, 12)],
+    [(0, 9), (1, 1)],
+    [(0, 10), (1, 2)],
+    [(0, 11), (1, 3)],
+]
+
+_COL_WIDTH = 55.3                           # width of one day column
+_SECTION_TOPS = [18, 171, 325, 479, 9999]  # top of each of the 4 month rows (+sentinel)
+
 # col 0 = Sunday … col 6 = Saturday → ISO weekday (Mon=1 … Sun=7)
 _COL_TO_ISOWD = [7, 1, 2, 3, 4, 5, 6]
 
 # Collection-colour map (CMYK tuples as returned by pdfplumber)
 _COLLECTION_COLORS = {
-    (0.40, 0.00, 0.80, 0.00): "organic",      # Green (Apple core)
-    (1.00, 0.76, 0.00, 0.00): "recyclables",  # Blue (Blue bin)
-    (0.00, 0.00, 0.00, 0.75): "household",    # Grey (Trash can)
-    (0.45, 0.70, 0.00, 0.00): "leaf",         # Brown (Leaf collection)
-    (0.25, 0.85, 0.85, 0.25): "leaf",         # Brown (Alternative leaf collection shade)
-    (0.82, 0.19, 0.44, 0.23): "mattress",     # Pink (Mattress/box-spring)
-    (0.00, 0.52, 0.75, 0.00): "bulky",        # Orange (Bulky items)
-    (0.00, 0.20, 0.85, 0.00): "ecocentre",    # Yellow-Orange (Ecocentre/HHW)
+    (0.40, 0.00, 0.80, 0.00): "organic",         # Green (Apple core)
+    (1.00, 0.76, 0.00, 0.00): "recyclables",     # Blue (Blue bin)
+    (0.00, 0.00, 0.00, 0.75): "household",       # Grey (Trash can)
+    (0.25, 0.85, 0.85, 0.25): "leaf",            # Brown (Leaf collection)
+    (0.45, 0.70, 0.00, 0.00): "mattress",        # Purple/Brown (Mattress/box-spring)
+    (0.82, 0.19, 0.44, 0.23): "christmas_trees", # Burgundy/Pink (Christmas tree collection)
+    (0.00, 0.52, 0.75, 0.00): "bulky",           # Orange (Bulky items)
+    (0.00, 0.20, 0.85, 0.00): "ecocentre",       # Yellow-Orange (Ecocentre/HHW)
 }
 
 
@@ -184,15 +191,19 @@ def _section_of(top: float) -> int:
     return -1
 
 
-def _grid_of(x0: float) -> int:
-    for i in range(len(_GRID_X_STARTS) - 1):
-        if _GRID_X_STARTS[i] - 5 <= x0 < _GRID_X_STARTS[i + 1] - 5:
+def _grid_of(x0: float, grid_starts: list[float] | None = None) -> int:
+    starts = grid_starts if grid_starts is not None else _GRID_X_STARTS
+    for i in range(len(starts) - 1):
+        if starts[i] - 5 <= x0 < starts[i + 1] - 5:
             return i
-    return 2 if x0 >= _GRID_X_STARTS[-1] - 5 else -1
+    return len(starts) - 1 if x0 >= starts[-1] - 5 else -1
 
 
-def _col_of(x0: float, grid_idx: int) -> int:
-    col = round((x0 - _GRID_X_STARTS[grid_idx]) / _COL_WIDTH)
+def _col_of(x0: float, grid_idx: int, grid_starts: list[float] | None = None) -> int:
+    starts = grid_starts if grid_starts is not None else _GRID_X_STARTS
+    if grid_idx < 0 or grid_idx >= len(starts):
+        return -1
+    col = round((x0 - starts[grid_idx]) / _COL_WIDTH)
     return col if 0 <= col <= 6 else -1
 
 
@@ -209,8 +220,9 @@ def parse_pdf_schedule(pdf_data: bytes, sector: str) -> dict:
     """
     Parse the collection schedule from the PDF's coloured calendar grid.
 
+    Supports both 3-column (12-month, Apr–Mar) and 2-column (8-month mid-year, Aug–Mar) PDF layouts.
     Returns a schedule dict containing sorted lists of exact dates for each collection type,
-    plus start_year and end_year.
+    plus start_year, end_year, and start_month.
     """
     try:
         import pdfplumber  # type: ignore[import]
@@ -222,6 +234,12 @@ def parse_pdf_schedule(pdf_data: bytes, sector: str) -> dict:
         page = pdf.pages[0]
         rects = page.rects
         raw_text = page.extract_text() or ""
+        width = page.width
+
+    is_2col = width < 1400
+    grid_starts = _GRID_X_STARTS_2COL if is_2col else _GRID_X_STARTS
+    month_grid = _MONTH_GRID_2COL if is_2col else _MONTH_GRID
+    start_month = 8 if is_2col else 4
 
     start_year, end_year = _year_range_from_text(raw_text)
 
@@ -242,11 +260,11 @@ def parse_pdf_schedule(pdf_data: bytes, sector: str) -> dict:
             top = r["top"]
 
             sec = _section_of(top)
-            grd = _grid_of(x0)
+            grd = _grid_of(x0, grid_starts)
             if sec >= 0 and grd >= 0:
-                col = _col_of(x0, grd)
+                col = _col_of(x0, grd, grid_starts)
                 if col >= 0:
-                    yr_off, month = _MONTH_GRID[sec][grd]
+                    yr_off, month = month_grid[sec][grd]
                     year = start_year + yr_off
 
                     # Compute row_idx
@@ -267,21 +285,24 @@ def parse_pdf_schedule(pdf_data: bytes, sector: str) -> dict:
                         # Day out of range
                         pass
 
-    # Extract Christmas tree dates from raw text
-    xmas_dates = _extract_christmas_tree_dates(raw_text, end_year, sector)
-    xmas_dates = [d for d in xmas_dates if d.month == 1]
+    # Extract Christmas tree dates: use grid dates if found, else parse from text / fallback
+    xmas_dates = [d for d in collections.get("christmas_trees", set()) if d.month == 1]
     if not xmas_dates:
-        xmas_dates = (
-            [date(end_year, 1, 7), date(end_year, 1, 14)]
-            if sector == "A"
-            else [date(end_year, 1, 6), date(end_year, 1, 13)]
-        )
+        xmas_dates = _extract_christmas_tree_dates(raw_text, end_year, sector)
+        xmas_dates = [d for d in xmas_dates if d.month == 1]
+        if not xmas_dates:
+            xmas_dates = (
+                [date(end_year, 1, 7), date(end_year, 1, 14)]
+                if sector == "A"
+                else [date(end_year, 1, 6), date(end_year, 1, 13)]
+            )
+    collections["christmas_trees"] = set(xmas_dates)
 
     # Convert sets to sorted lists
     schedule = {
         "start_year": start_year,
         "end_year": end_year,
-        "christmas_trees": sorted(xmas_dates),
+        "start_month": start_month,
     }
     for ctype in collections:
         schedule[ctype] = sorted(list(collections[ctype]))
@@ -315,14 +336,14 @@ def _extract_christmas_tree_dates(text: str, end_year: int, sector: str) -> list
         for month_name, month_num in _MONTH_NAMES.items():
             if month_name not in snippet:
                 continue
-            # "January 7 and 14" or "7 et 14 janvier"
+            # Avoid matching 4-digit years like 2027
             m = re.search(
-                month_name + r"\s+(\d{1,2})(?:\s+(?:and|et|&)\s+(\d{1,2}))?",
+                month_name + r"\s+(?!20\d\d)(\d{1,2})(?:\s+(?:and|et|&)\s+(\d{1,2}))?",
                 snippet,
             )
             if not m:
                 m = re.search(
-                    r"(\d{1,2})\s+(?:and|et|&)\s+(\d{1,2})\s+" + month_name,
+                    r"(?<!\d)(\d{1,2})\s+(?:and|et|&)\s+(\d{1,2})\s+" + month_name,
                     snippet,
                 )
             if m:
@@ -401,7 +422,8 @@ def generate_ics(sector: str, schedule: dict) -> bytes:
 # ---------------------------------------------------------------------------
 
 def process_sector(sector: str, url: str,
-                   cached_hashes: dict, new_hashes: dict) -> bool:
+                   cached_hashes: dict, new_hashes: dict,
+                   force: bool = False) -> bool:
     """
     Download, compare hashes, parse, and write the ICS for one sector.
     Returns True if the ICS file was updated.
@@ -417,25 +439,38 @@ def process_sector(sector: str, url: str,
     digest = sha256(pdf_data)
     new_hashes[f"sector_{sector}"] = digest
 
-    if cached_hashes.get(f"sector_{sector}") == digest:
+    if not force and cached_hashes.get(f"sector_{sector}") == digest:
         print(f"[sector {sector}] PDF unchanged (hash match); skipping update.")
         return False
 
     print(f"[sector {sector}] PDF changed or new — parsing…")
     schedule = parse_pdf_schedule(pdf_data, sector)
 
+    # If the PDF is a mid-year update (e.g. starts in August), attempt to load pre-update
+    # months (April–July) from the full-year 12-month PDF so the calendar remains complete.
+    if schedule.get("start_month", 4) > 4:
+        base_url = _guess_url(sector)
+        if base_url != url:
+            print(f"[sector {sector}] Mid-year PDF detected (start_month={schedule['start_month']}). Fetching base 12-month PDF for early months…")
+            try:
+                base_pdf_data = fetch(base_url)
+                base_schedule = parse_pdf_schedule(base_pdf_data, sector)
+                cutoff = date(schedule["start_year"], schedule["start_month"], 1)
+                for key in set(schedule.keys()) & set(base_schedule.keys()):
+                    if isinstance(schedule[key], list):
+                        early_dates = [d for d in base_schedule[key] if d < cutoff]
+                        schedule[key] = sorted(early_dates + schedule[key])
+                print(f"[sector {sector}] Merged early dates (April–July) from base calendar.")
+            except Exception as exc:
+                print(f"[sector {sector}] Could not fetch base 12-month PDF ({exc}); continuing with mid-year schedule.")
+
     print(
         f"[sector {sector}] Parsed schedule for "
         f"{schedule['start_year']}–{schedule['end_year']}:"
     )
-    print(f"  Organic:      {len(schedule['organic'])} events")
-    print(f"  Recyclables:  {len(schedule['recyclables'])} events")
-    print(f"  Household:    {len(schedule['household'])} events")
-    print(f"  Bulky:        {len(schedule['bulky'])} events")
-    print(f"  Leaf:         {len(schedule['leaf'])} events")
-    print(f"  Mattress:     {len(schedule['mattress'])} events")
-    print(f"  Ecocentre:    {len(schedule['ecocentre'])} events")
-    print(f"  Christmas:    {schedule['christmas_trees']}")
+    for k in sorted(schedule.keys()):
+        if isinstance(schedule[k], list):
+            print(f"  {k:15}: {len(schedule[k])} events")
 
     ics_bytes = generate_ics(sector, schedule)
     ics_path.write_bytes(ics_bytes)
@@ -444,12 +479,13 @@ def process_sector(sector: str, url: str,
 
 
 def main() -> None:
+    force = "--force" in sys.argv
     urls = discover_pdf_urls()
     cached = load_hashes()
     new_hashes = dict(cached)
 
-    updated_a = process_sector("A", urls["A"], cached, new_hashes)
-    updated_b = process_sector("B", urls["B"], cached, new_hashes)
+    updated_a = process_sector("A", urls["A"], cached, new_hashes, force=force)
+    updated_b = process_sector("B", urls["B"], cached, new_hashes, force=force)
 
     save_hashes(new_hashes)
 
